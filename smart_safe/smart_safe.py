@@ -1,0 +1,68 @@
+import cv2
+import face_recognition
+from imutils.video import VideoStream
+from imutils.video import FPS
+from datetime import datetime
+import imutils
+import pickle
+import time
+
+
+current_name = "Unrecognised"
+match_threshold = 7
+encodings_file = "encodings.pickle"
+encoding_data = pickle.loads(open(encodings_file, "rb").read())
+pause = False
+# cam = cv2.VideoCapture(0)  #0 means the default camera.
+face_encoding = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface.xml")
+# eyes_encoding = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
+
+cam = VideoStream(src=0).start()
+time.sleep(2.0)
+fps = FPS().start()
+
+
+while True:
+    video = cam.read()
+    video = imutils.resize(video, width=500)
+    gray = cv2.cvtColor(video, cv2.COLOR_BGR2GRAY)
+    rgb = cv2.cvtColor(video, cv2.COLOR_BGR2RGB)
+    faces = face_encoding.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=5)
+    faces_rect = []
+    for (x, y, w, h) in faces:
+        cv2.rectangle(video, (x, y), (x + w, y + h), (0, 0, 255), 2) #This is the red box around face
+        faces_rect.append((y, x + w, y + h, x))
+
+        #Detect Eye Region
+        # roi_gray = gray[y: y+h, x: x+w]
+        # roi_color = rgb[y: y+h, x: x+w]
+
+    encodings = face_recognition.face_encodings(rgb, faces_rect)
+    for (y1, x2, y2, x1), encoding in zip(faces_rect, encodings):
+        matches = face_recognition.compare_faces(encoding_data["encodings"], encoding)
+        name = "unrecognised"
+        
+        if True in matches:
+            matchedIdx = [i for (i, match) in enumerate(matches) if match]
+            if len(matchedIdx > match_threshold):
+                current_name = "recognised"
+                
+                timestamp = datetime.now()
+                timestamp = timestamp.strftime("%d_%m_%Y %H_%M_%S")
+                cv2.imwrite(f"accessed_image/{timestamp}.jpg", video)
+                cv2.rectangle(video, (x1, y1), (x2, y2), (0, 255, 0), 2) #Change box to green
+                #Add servo unlock code here
+                print("Recognised User, Box Unlocked")
+                time.sleep(10.0) #Dont want infinite loop of saving images
+
+        else:
+            #Add servo lock code here
+            continue
+
+        
+        cv2.imshow("camera", video)
+        if cv2.waitKey(1) == ord("q"):
+            break
+
+    cam.release()
+    cv2.destroyAllWindows
